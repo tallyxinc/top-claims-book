@@ -1,2 +1,2 @@
 # top-claims-book
-TOP contract for Claims Book
+TOP protocol contract for Claims Book

@@ -12,281 +12,264 @@ contract('ClaimsBook', accounts => {
 
     let claimsBook;
     let owner = accounts[0];
-    let eventReporter = accounts[1];
+    let changeAgent = accounts[1];
 
     beforeEach(async () => {
-        claimsBook = await ClaimsBook.new(eventReporter, {from: owner});
+        claimsBook = await ClaimsBook.new(owner, {from: owner});
     });
 
-    it('should check that event reporter is really event reporters and owner is not event reporter', async () => {
-        let ownerStatus = await claimsBook.isEventReporter(owner);
-        assert.equal(ownerStatus, false, "owner is event reporter");
-        let eventReporterStatus = await claimsBook.isEventReporter(eventReporter);
-        assert.equal(eventReporterStatus, true, "eventReporter is not event reporter");
+    it('should check that owner is changeAgent', async() => {
+        let ownerStatus = await claimsBook.isChangeAgent(owner);
+        assert.equal(ownerStatus, true, "owner is not change agent");
     });
 
-    it('should check that random address is not event reporter', async () => {
-        let randomUser = accounts[2];
-        let randomUserStatus = await claimsBook.isEventReporter(randomUser);
-        assert.equal(randomUserStatus, false, "randomUser is event reporter");
+    it('should check that random address is not change agent', async () => {
+        let randomAddressStatus = await claimsBook.isChangeAgent(accounts[8]);
+        assert.equal(randomAddressStatus, false, "random address is change agent");
     });
 
-    it('should not update event reporter cause msg.sender != owner', async () => {
-        let newEventReporter = accounts[2];
-        await claimsBook.updateEventReporter(newEventReporter, true, {from: accounts[1]})
+    it('should update change agent', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+    });
+
+    it('should not update change agent cause agent == address(0)', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(0x0, true)
             .then(Utils.receiptShouldFailed)
             .catch(Utils.catchReceiptShouldFailed);
 
-        let newEventReporterStatus = await claimsBook.isEventReporter(newEventReporter);
-        assert.equal(newEventReporterStatus, false, "newEventReporter is event reporter");
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
     });
 
-    it('should not update event reporter cause eventReporter == address(0)', async () => {
-        let newEventReporter = 0x0;
-        await claimsBook.updateEventReporter(newEventReporter, true, {from: owner})
+    it('should not update change agent cause status == current status', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(changeAgent, false)
             .then(Utils.receiptShouldFailed)
             .catch(Utils.catchReceiptShouldFailed);
 
-        let newEventReporterStatus = await claimsBook.isEventReporter(newEventReporter);
-        assert.equal(newEventReporterStatus, false, "newEventReporter is event reporter");
-    });
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+    });    
 
-    it('should update event reporter', async () => {
-        let newEventReporter = accounts[2];
-        await claimsBook.updateEventReporter(newEventReporter, true, {from: owner})
+    it('should create claim', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 1;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
             .then(Utils.receiptShouldSucceed);
 
-        let newEventReporterStatus = await claimsBook.isEventReporter(newEventReporter);
-        assert.equal(newEventReporterStatus, true, "newEventReporter is not event reporter");
-    });
+        let claim = await claimsBook.claims.call(claimId);
+        assert.equal(new BigNumber(claim[0]).valueOf(), new BigNumber(claimType).valueOf(), "claimType is not equal");
+        assert.equal(claim[2], true, "claimPeriodStatus is not equal");
 
-    it('should not emit fungible transfer event cause msg.sender != eventReporter', async () => {
-        let from = accounts[2];
-        let to = accounts[3];
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('10').mul(precision);
+        let createClaimEvents = await claimsBook.CreateClaim({}, {fromBlock: '0', toBlock: 'latest'});
 
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase.address,
-            amount,
-            {from: accounts[5]}
-        )
+        createClaimEvents.get((err, logs) => {
+            assert.equal(logs.length, 1, "more or less than 1 event");
+            assert.equal(logs[0].event, "CreateClaim", "event type is not equal");
+            assert.equal(logs[0].args.claimId, claimId, "claim id is not equal");
+            assert.equal(logs[0].args.creator, changeAgent, "claim creator is not equal");
+
+            logs.forEach(log => console.log(log.args));
+        });
+    }); 
+
+    it('should not create claim cause claimId == 0', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 0;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
             .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
+            .catch(Utils.catchReceiptShouldFailed);
     });
 
-    it('should not emit fungible transfer event cause from == address(0)', async () => {
-        let from = 0x0;
-        let to = accounts[3];
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('10').mul(precision);
+    it('should not create claim cause claimType == 0', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
 
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase.address,
-            amount,
-            {from: eventReporter}
-        )
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 1;
+        let claimType = 0;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
             .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
+            .catch(Utils.catchReceiptShouldFailed);
     });
 
-    it('should not emit fungible transfer event cause to == address(0)', async () => {
-        let from = accounts[2];
-        let to = 0x0;
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('10').mul(precision);
+    it('should not create claim cause claim already exists', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
 
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase.address,
-            amount,
-            {from: eventReporter}
-        )
-            .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
-    });
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
 
-    it('should not emit fungible transfer event cause fungibleToken == address(0)', async () => {
-        let from = accounts[2];
-        let to = accounts[3];
-        let fungibleToken = 0x0;
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('10').mul(precision);
+        let claimId = 1;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
 
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken,
-            nftBase.address,
-            amount,
-            {from: eventReporter}
-        )
-            .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
-    });
-
-    it('should not emit fungible transfer event cause nftBase == address(0)', async () => {
-        let from = accounts[2];
-        let to = accounts[3];
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = 0x0;
-        let amount = new BigNumber('10').mul(precision);
-
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase,
-            amount,
-            {from: eventReporter}
-        )
-            .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
-    });
-
-    it('should not emit fungible transfer event cause amount == 0', async () => {
-        let from = accounts[2];
-        let to = accounts[3];
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('0').mul(precision);
-
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase.address,
-            amount,
-            {from: eventReporter}
-        )
-            .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);  
-    });
-
-    it('should emit fungible transfer event', async () => {
-        let from = accounts[2];
-        let to = accounts[3];
-        let fungibleToken = await SimpleToken.new();
-        let nftBase = await SimpleToken.new();
-        let amount = new BigNumber('10').mul(precision);
-
-        await claimsBook.emitFungibleTransfer(
-            from,
-            to,
-            fungibleToken.address,
-            nftBase.address,
-            amount,
-            {from: eventReporter}
-        )
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
             .then(Utils.receiptShouldSucceed);
 
-        let emitFungibleTransferEvents = claimsBook.FungibleTransfer({}, {fromBlock: 0, toBlock: 'latest'});
-        
-        emitFungibleTransferEvents.get((error, logs) => {
+        let claim = await claimsBook.claims.call(claimId);
+        assert.equal(new BigNumber(claim[0]).valueOf(), new BigNumber(claimType).valueOf(), "claimType is not equal");
+        assert.equal(claim[2], true, "claimPeriodStatus is not equal");
 
-            assert.equal(logs.length, 1, "were emitted more than 1 event");
-            assert.equal(logs[0].event, 'FungibleTransfer', "event type is not equal");
-            assert.equal(logs[0].args._from, accounts[2], "_from is not equal");
-            assert.equal(logs[0].args._to, accounts[3], "_to is not equal");
-            assert.equal(logs[0].args._fungibleToken, fungibleToken.address, "_fungibleToken is not equal");
-            assert.equal(logs[0].args._nftBase, nftBase.address, "_nftBase is not equal");
-            assert.equal(new BigNumber(logs[0].args._amount).valueOf(), amount.valueOf(), "amount is not equal");
-            
-            console.log('FungibleTransfer Event:');                    
+        await claimsBook.isClaimExists(0)
+            .then(Utils.receiptShouldFailed)
+            .catch(Utils.catchReceiptShouldFailed);
+
+        let claimExist = await claimsBook.isClaimExists(claimId);
+        assert.equal(claimExist, true, "claim is not exist");
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
+            .then(Utils.receiptShouldFailed)
+            .catch(Utils.catchReceiptShouldFailed);
+    });
+
+    it('should retrieve claim', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
+
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 1;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
+            .then(Utils.receiptShouldSucceed);
+
+        let claim = await claimsBook.claims.call(claimId);
+        assert.equal(new BigNumber(claim[0]).valueOf(), new BigNumber(claimType).valueOf(), "claimType is not equal");
+        assert.equal(claim[2], true, "claimPeriodStatus is not equal");
+
+        let claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, true, "claimPeriodStatus is not equal");
+
+        await claimsBook.retrieveClaim(claimId, metadata, {from: changeAgent})
+            .then(Utils.receiptShouldSucceed);
+
+        claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, false, "claimPeriodStatus is not equal");
+
+        let retrieveClaimEvents = await claimsBook.RetrieveClaim({}, {fromBlock: '0', toBlock: 'latest'});
+
+        retrieveClaimEvents.get((err, logs) => {
+            assert.equal(logs.length, 1, "more or less than 1 event");
+            assert.equal(logs[0].event, "RetrieveClaim", "event type is not equal");
+            assert.equal(logs[0].args.claimId, claimId, "claim id is not equal");
+            assert.equal(logs[0].args.retriever, changeAgent, "claim retriever is not equal");
+
             logs.forEach(log => console.log(log.args));
         });
     });
 
-    it('should emit non fungible split event', async () => {
-        let tokenOwner = accounts[2];
-        let nftBase = await SimpleToken.new();
-        let obligatureId = new BigNumber(1);
-        let marketplaceId = new BigNumber(1);
+    it('should not retrieve claim cause msg.sender != changeAgent', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
 
-        await claimsBook.emitNonFungibleSplit(
-            tokenOwner,
-            nftBase.address,
-            obligatureId,
-            marketplaceId,
-            {from: eventReporter}
-        )
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 1;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
             .then(Utils.receiptShouldSucceed);
 
-        let emitNonFungibleSplitEvents = claimsBook.ObligatureSplit({}, {fromBlock: 0, toBlock: 'latest'})
+        let claim = await claimsBook.claims.call(claimId);
+        assert.equal(new BigNumber(claim[0]).valueOf(), new BigNumber(claimType).valueOf(), "claimType is not equal");
+        assert.equal(claim[2], true, "claimPeriodStatus is not equal");
 
-        emitNonFungibleSplitEvents.get((error, logs) => {
+        let claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, true, "claimPeriodStatus is not equal");
 
-            assert.equal(logs.length, 1, "were emitted more than 1 event");
-            assert.equal(logs[0].event, 'ObligatureSplit', "event type is not equal");
-            assert.equal(logs[0].args._tokenOwner, accounts[2], "_tokenOwner is not equal");
-            assert.equal(logs[0].args._nftBase, nftBase.address, "_nftBase is not equal");
-            assert.equal(new BigNumber(logs[0].args._obligatureId).valueOf(), obligatureId.valueOf(), "_obligatureId is not equal");
-            assert.equal(new BigNumber(logs[0].args._marketplaceId).valueOf(), marketplaceId.valueOf(), "_marketplaceId is not equal");
-            
-            console.log('ObligatureSplit Event:');
-            logs.forEach(log => console.log(log.args));
-        });
-    });
-
-    it('should not emit non fungible split event cause msg.sender != event reporter', async () => {
-        let tokenOwner = accounts[2];
-        let nftBase = await SimpleToken.new();
-        let obligatureId = new BigNumber(1);
-        let marketplaceId = new BigNumber(1);
-
-        await claimsBook.emitNonFungibleSplit(
-            tokenOwner,
-            nftBase.address,
-            obligatureId,
-            marketplaceId,
-            {from: accounts[5]}
-        )
+        await claimsBook.retrieveClaim(claimId, metadata, {from: accounts[3]})
             .then(Utils.receiptShouldFailed)
             .catch(Utils.catchReceiptShouldFailed);
+
+        claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, true, "claimPeriodStatus is not equal");
     });
 
-    it('should not emit non fungible split event cause tokenOwner == address(0)', async () => {
-        let tokenOwner = 0x0;
-        let nftBase = await SimpleToken.new();
-        let obligatureId = new BigNumber(1);
-        let marketplaceId = new BigNumber(1);
+    it('should not retrieve claim cause claimId == 0 && existingClaim[_claimId] == false', async () => {
+        let userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, false, "user is change agent");
 
-        await claimsBook.emitNonFungibleSplit(
-            tokenOwner,
-            nftBase.address,
-            obligatureId,
-            marketplaceId,
-            {from: eventReporter}
-        )
+        await claimsBook.updateChangeAgent(changeAgent, true)
+            .then(Utils.receiptShouldSucceed);
+    
+        userStatus = await claimsBook.isChangeAgent(changeAgent);
+        assert.equal(userStatus, true, "user is change agent");
+
+        let claimId = 1;
+        let claimType = 1;
+        let metadata = [0x12, 0x34];
+
+        await claimsBook.createClaim(claimId, claimType, metadata, {from: changeAgent})
+            .then(Utils.receiptShouldSucceed);
+
+        let claim = await claimsBook.claims.call(claimId);
+        assert.equal(new BigNumber(claim[0]).valueOf(), new BigNumber(claimType).valueOf(), "claimType is not equal");
+        assert.equal(claim[2], true, "claimPeriodStatus is not equal");
+
+        let claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, true, "claimPeriodStatus is not equal");
+
+        await claimsBook.retrieveClaim(0, metadata, {from: changeAgent})
             .then(Utils.receiptShouldFailed)
             .catch(Utils.catchReceiptShouldFailed);
-    });
 
-    it('should not emit non fungible split event cause nftBase == address(0)', async () => {
-        let tokenOwner = accounts[4];
-        let nftBase = 0x0;
-        let obligatureId = new BigNumber(1);
-        let marketplaceId = new BigNumber(1);
-
-        await claimsBook.emitNonFungibleSplit(
-            tokenOwner,
-            nftBase,
-            obligatureId,
-            marketplaceId,
-            {from: eventReporter}
-        )
-            .then(Utils.receiptShouldFailed)
-            .catch(Utils.catchReceiptShouldFailed);
+        claimPeriodStatus = await claimsBook.getClaimPeriodStatus(claimId);
+        assert.equal(claimPeriodStatus, true, "claimPeriodStatus is not equal");
     });
 });

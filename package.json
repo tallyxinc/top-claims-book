@@ -1,7 +1,7 @@
 {
-  "name": "smart-contract-templates",
+  "name": "claims-book",
   "version": "1.0.0",
-  "description": "Smart Contract templates",
+  "description": "Claims Book",
   "homepage": "https://bitbucket.org/applicature/solidity.project-template#readme",
   "license": "UNLICENSED",
   "keywords": [

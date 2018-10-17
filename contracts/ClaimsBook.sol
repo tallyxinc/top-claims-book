@@ -1,126 +1,258 @@
 pragma solidity ^0.4.24;
 
-import 'openzeppelin-solidity/contracts/ownership/Ownable.sol'; 
+import "openzeppelin-solidity/contracts/ownership/Ownable.sol"; 
+import "./Permissions.sol";
 
-contract ClaimsBook is Ownable {
+contract ClaimsBook is Ownable, Permissions {
 
-    struct Claim {
-        uint256 claimType;
-        bytes metadata;
-        bool claimPeriodStatus;
+    // Struct that introduce Claim entity of Tallyx system
+    struct ClaimRecord {
+        string claimId;
+        string parentClaimId;
+        string claimType;
+        string claimStatus;
+        string claimantId;
+        string claimVerifierId;
+        ClaimRecordProof proofData;
+        bool created;
     }
 
-    mapping (address => bool) private changeAgent;
+    // Struct that introduce Claim entity proof data of Tallyx system
+    struct ClaimRecordProof {
+        string proofVaultProviderId;
+        string proofId;
+        string proofDataKeys;   
+        bool created;
+    }
 
-    mapping (uint256 => Claim) public claims;
+    // Mapping from hashed claim id to Claim data
+    mapping (bytes32 => ClaimRecord) public claims;
 
-    mapping (uint256 => bool) public existingClaims;
-
-    event CreateClaim(
-        uint256 claimId,
-        address creator
+    /**
+     * @dev Emits when claim is created
+     */
+    event ClaimCreated(
+        string _claimId,
+        address _creator
     );
 
-    event RetrieveClaim(
-        uint256 claimId,
-        address retriever
+    /**
+     * @dev Emits when claim proof data is created
+     */
+    event ClaimProofDataCreated(
+        string _claimId,
+        address _creator
     );
 
-    constructor(address _agent) public {
-        changeAgent[_agent] = true;
-    }
+    /**
+     * @dev Emits when claim status is updated
+     */
+    event ClaimStatusUpdated(
+        string _claimId,
+        address _modifier,
+        string _claimStatus
+    );
 
-    modifier onlyChangeAgent() {
-        require(changeAgent[msg.sender] == true);
-        _;
-    }
+    /**
+     * @dev Emits when claim verifier is updated
+     */
+    event ClaimVerifierUpdated(
+        string _claimId,
+        address _modifier,
+        string _claimVerifierId
+    );
 
-    function updateChangeAgent(
-        address _agent,
-        bool _status
-    )   
-        public 
-        onlyOwner
+    /**
+     * @dev Constructor for ClaimsBook contract for Tallyx system
+     * @notice msg.sender means address from which contract was deployed
+     */
+    constructor() 
+        public
+        Permissions() 
     {
-        require(
-            _agent != address(0) &&
-            changeAgent[_agent] != _status
+        permissions[msg.sender] = PERMISSION_SET_PERMISSION | PERMISSION_TO_CREATE | 
+            PERMISSION_TO_MODIFY_STATUS | PERMISSION_TO_MODIFY_VERIFIER;
+    }
+
+    /**
+     * @dev Returns main claim data by id
+     * @param _claimId - Unique identifier of claim
+     */
+    function claimBookRecordById(string _claimId)
+        public
+        view
+        returns(
+            string,
+            string,
+            string,
+            string,
+            string
+        )
+    {
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
+        require(claims[hashedClaimId].created == true);
+        return (
+            claims[hashedClaimId].parentClaimId,
+            claims[hashedClaimId].claimType,
+            claims[hashedClaimId].claimStatus,
+            claims[hashedClaimId].claimantId,
+            claims[hashedClaimId].claimVerifierId
         );
-        changeAgent[_agent] = _status;
     }
 
-    function getClaimPeriodStatus(uint256 _claimId)
+    /** 
+     * @dev Returns claim proof data by id
+     * @param _claimId - Unique identifier of claim
+     */
+    function claimBookRecordProofById(string _claimId)
         public
         view
-        returns (bool)
+        returns (
+            string,
+            string,
+            string
+        )
     {
-        require(_claimId > 0);
-        return claims[_claimId].claimPeriodStatus;
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
+        require(
+            claims[hashedClaimId].created == true &&
+            claims[hashedClaimId].proofData.created == true
+        );
+        return (
+            claims[hashedClaimId].proofData.proofVaultProviderId,
+            claims[hashedClaimId].proofData.proofId,
+            claims[hashedClaimId].proofData.proofDataKeys
+        );
     }
 
-    function isChangeAgent(address _user)  
-        public 
-        view 
-        returns (bool) 
-    {
-        return changeAgent[_user];
-    }
-
-    function isClaimExists(uint256 _claimId)
-        public
-        view
-        returns (bool)
-    {
-        require(_claimId > 0);
-        return existingClaims[_claimId];
-    }
-
-    function createClaim(
-        uint256 _claimId,
-        uint256 _claimType,
-        bytes _metadata
+    /** 
+     * @dev Adds new claim to registry, also pushing claim metadata 
+     * to it (parentClaimId, claimType, claimantId, claimVerifierId, claimStatus)
+     * @param _claimId - Unique identifier of claim
+     */
+    function createClaimBookRecord(
+        string _claimId,
+        string _parentClaimId, 
+        string _claimType,
+        string _claimStatus,
+        string _claimantId,
+        string _claimVerifierId
     )
         public
-        onlyChangeAgent
+        hasPermission(msg.sender, PERMISSION_TO_CREATE)
+        returns (bool)
     {
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
         require(
-            _claimId > 0 &&
-            _claimType > 0 &&
-            existingClaims[_claimId] == false
+            claims[hashedClaimId].created == false &&
+            claims[hashedClaimId].proofData.created == false
         );
 
-        claims[_claimId] = Claim({
-            claimType: _claimType,
-            metadata: _metadata,
-            claimPeriodStatus: true
-        });
+        claims[hashedClaimId].claimId = _claimId;
+        claims[hashedClaimId].parentClaimId = _parentClaimId;
+        claims[hashedClaimId].claimType = _claimType;
+        claims[hashedClaimId].claimStatus = _claimStatus;
+        claims[hashedClaimId].claimantId = _claimantId;
+        claims[hashedClaimId].claimVerifierId = _claimVerifierId;
+        claims[hashedClaimId].created = true;
 
-        existingClaims[_claimId] = true;
-
-        emit CreateClaim(
+        emit ClaimCreated(
             _claimId,
             msg.sender
         );
+
+        return true;
     }
 
-    function retrieveClaim(
-        uint256 _claimId,
-        bytes _metadata
+    /**
+     * @dev Adds claim proof data (_proofVaultProviderId, _proofId, _proofDataKeys) 
+     * to existing claim (_claimId)
+     * @param _claimId - Unique identifier of claim
+     */
+    function createClaimBookRecordProofData(
+        string _claimId,
+        string _proofVaultProviderId,
+        string _proofId,
+        string _proofDataKeys
     )
         public
-        onlyChangeAgent
+        hasPermission(msg.sender, PERMISSION_TO_CREATE)
+        returns (bool)
     {
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
         require(
-            _claimId > 0 &&
-            isClaimExists(_claimId) == true
+            claims[hashedClaimId].created == true &&
+            claims[hashedClaimId].proofData.created == false
         );
 
-        claims[_claimId].metadata = _metadata;
-        claims[_claimId].claimPeriodStatus = false;
+        claims[hashedClaimId].proofData.proofVaultProviderId = _proofVaultProviderId;
+        claims[hashedClaimId].proofData.proofId = _proofId;
+        claims[hashedClaimId].proofData.proofDataKeys = _proofDataKeys;
+        claims[hashedClaimId].proofData.created = true;
 
-        emit RetrieveClaim(
+        emit ClaimProofDataCreated(
             _claimId,
             msg.sender
         );
+
+        return true;
+    }
+
+    /**
+     * @dev Updates claim status in registry by id
+     * @param _claimId - Unique identifier of claim
+     */
+    function updateClaimStatus(
+        string _claimId,
+        string _claimStatus
+    )
+        public
+        hasPermission(msg.sender, PERMISSION_TO_MODIFY_STATUS)
+        returns (bool)
+    {
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
+        require(
+            claims[hashedClaimId].created == true &&
+            claims[hashedClaimId].proofData.created == true
+        );
+        
+        claims[hashedClaimId].claimStatus = _claimStatus;
+
+        emit ClaimStatusUpdated(
+            _claimId,
+            msg.sender,
+            _claimStatus
+        );
+
+        return true;
+    }
+
+    /**
+     * @dev Updates claim verifier in registry by id
+     * @param _claimId - Unique identifier of claim
+     */
+    function updateClaimVerifier(
+        string _claimId,
+        string _claimVerifierId
+    )
+        public
+        hasPermission(msg.sender, PERMISSION_TO_MODIFY_VERIFIER)
+        returns (bool)
+    {
+        bytes32 hashedClaimId = keccak256(bytes(_claimId));
+        require(
+            claims[hashedClaimId].created == true &&
+            claims[hashedClaimId].proofData.created == true
+        );
+        
+        claims[hashedClaimId].claimVerifierId = _claimVerifierId;
+
+        emit ClaimVerifierUpdated(
+            _claimId,
+            msg.sender,
+            _claimVerifierId
+        );
+
+        return true;
     }
 }

@@ -3,6 +3,7 @@ pragma solidity ^0.4.24;
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol"; 
 import "./Permissions.sol";
 
+
 contract ClaimsBook is Ownable, Permissions {
 
     // Struct that introduce Claim entity of Tallyx system
@@ -70,8 +71,9 @@ contract ClaimsBook is Ownable, Permissions {
         public
         Permissions() 
     {
-        permissions[msg.sender] = PERMISSION_SET_PERMISSION | PERMISSION_TO_CREATE | 
-            PERMISSION_TO_MODIFY_STATUS | PERMISSION_TO_MODIFY_VERIFIER;
+        permissions[msg.sender] = PERMISSION_SET_PERMISSION | 
+            PERMISSION_TO_CREATE | PERMISSION_TO_MODIFY_STATUS | 
+            PERMISSION_TO_MODIFY_VERIFIER;
     }
 
     /**
@@ -185,7 +187,8 @@ contract ClaimsBook is Ownable, Permissions {
             claims[hashedClaimId].proofData.created == false
         );
 
-        claims[hashedClaimId].proofData.proofVaultProviderId = _proofVaultProviderId;
+        claims[hashedClaimId].proofData.proofVaultProviderId = 
+            _proofVaultProviderId;
         claims[hashedClaimId].proofData.proofId = _proofId;
         claims[hashedClaimId].proofData.proofDataKeys = _proofDataKeys;
         claims[hashedClaimId].proofData.created = true;
@@ -215,7 +218,6 @@ contract ClaimsBook is Ownable, Permissions {
             claims[hashedClaimId].created == true &&
             claims[hashedClaimId].proofData.created == true
         );
-        
         claims[hashedClaimId].claimStatus = _claimStatus;
 
         emit ClaimStatusUpdated(
